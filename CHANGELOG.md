@@ -7,6 +7,7 @@ All Notable changes to `Csv` will be documented in this file
 ### Added
 
 - Support for `Closure` in constant expressions during Record Mapping.
+- `Reader::prepareHeaderPlan` and `Reader::getRecordsWithPlan` to bind an explicit header offset plan (`League\Csv\HeaderPlan`) and iterate records through a non-mutating `League\Csv\PlannedRecords` view which keeps original record offsets, preserves duplicated header names by occurrence identity and reports short rows and empty values separately.
 - `AbstractCsv::fromStream` to instantiate a `Reader` or a `Writer` instance from a stream or a `SplFileObject` object
 - `AbstractCsv::fromPath` to instantiate a `Reader` or a `Writer` instance from a path as a string or a `SplFileInfo` object
 - Support for `SortDirection` enum from PHP 8.6+ - [#580](https://github.com/thephpleague/csv/pull/580) by [okorneliuk](https://github.com/okorneliuk)

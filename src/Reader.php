@@ -516,6 +516,49 @@ class Reader extends AbstractCsv implements TabularDataReader, JsonSerializable
     }
 
     /**
+     * Prepares an explicit header offset binding plan.
+     *
+     * The plan captures the real header row and the resolved header offset
+     * without modifying the Reader state. Original record offsets (the
+     * source sequence numbers) are kept separate from the header row: the
+     * header is stored in the plan and will not be yielded as a data record
+     * by the resulting view.
+     *
+     * The plan is bound to this instance and to the resolved header offset;
+     * once the instance header offset changes, the plan becomes stale and
+     * getRecordsWithPlan() will reject it: a column plan can not be reused
+     * across different header offsets.
+     *
+     * @throws InvalidArgument If the offset is a negative integer or is missing
+     * @throws SyntaxError If no header record is found at the resolved offset
+     */
+    public function prepareHeaderPlan(?int $offset = null): HeaderPlan
+    {
+        $offset ??= $this->header_offset;
+        null !== $offset || throw InvalidArgument::dueToMissingHeaderOffset(__METHOD__);
+        -1 < $offset || throw InvalidArgument::dueToInvalidHeaderOffset($offset, __METHOD__);
+
+        return HeaderPlan::bind($this, $offset, $this->setHeader($offset));
+    }
+
+    /**
+     * Returns a lazy result view over the document records using the given plan.
+     *
+     * The Reader instance is not modified by the returned view. The plan is
+     * rejected if it was prepared for another instance or for another header
+     * offset: a stale column plan can not be reused after the header offset
+     * changed.
+     *
+     * @throws InvalidArgument If the plan is not bound to this instance current header offset
+     */
+    public function getRecordsWithPlan(HeaderPlan $plan): PlannedRecords
+    {
+        $plan->isBoundTo($this) || throw InvalidArgument::dueToStaleHeaderPlan($plan->offset, $this->header_offset, __METHOD__);
+
+        return new PlannedRecords(fn (): Iterator => $this->getInnerIterator(), $plan);
+    }
+
+    /**
      * @param array<string> $header
      *
      * @throws Exception

@@ -65,6 +65,16 @@ class InvalidArgument extends Exception
         return new self($method.'() expects header offset to be greater or equal to 0; `'.$offset.'` given.');
     }
 
+    public static function dueToMissingHeaderOffset(string $method): self
+    {
+        return new self($method.'() expects an explicit header offset; none was given and the instance has no header offset set.');
+    }
+
+    public static function dueToStaleHeaderPlan(int $planOffset, ?int $readerOffset, string $method): self
+    {
+        return new self($method.'() expects a header plan bound to this instance current header offset; the submitted plan is bound to offset `'.$planOffset.'` while the instance header offset is `'.(null === $readerOffset ? 'null' : (string) $readerOffset).'`; prepare a new plan.');
+    }
+
     public static function dueToInvalidRecordOffset(int $offset, string $method): self
     {
         return new self($method.'() expects the submitted offset to be a positive integer or 0, '.$offset.' given');
