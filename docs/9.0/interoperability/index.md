@@ -12,6 +12,7 @@ Depending on your operating system and software you are using to read/import you
 - [rfc4180 field compliance](/9.0/interoperability/rfc4180-field/)
 - [add the enclosure character on all fields](/9.0/interoperability/enclose-field/)
 - [prevents CSV formula injection](/9.0/interoperability/escape-formula-injection/)
+- [converting CSV delimiter](/9.0/interoperability/delimiter-converter/)
 
 <p class="message-info">Out of the box, <code>League\Csv</code> connections do not alter the CSV document presentation and use PHP's CSV native functions to read and write CSV records.</p>
 

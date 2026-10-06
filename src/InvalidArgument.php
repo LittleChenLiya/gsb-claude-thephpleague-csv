@@ -104,4 +104,9 @@ class InvalidArgument extends Exception
     {
         return new self($method.'() expects threshold to be null or a valid integer greater or equal to 1');
     }
+
+    public static function dueToUnsupportedDelimiterConversion(string $actualDelimiter, string $expectedDelimiter, string $method): self
+    {
+        return new self($method.'() only supports converting `'.$expectedDelimiter.'` delimited documents; `'.$actualDelimiter.'` given.');
+    }
 }
