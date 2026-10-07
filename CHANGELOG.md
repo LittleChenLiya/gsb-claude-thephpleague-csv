@@ -6,6 +6,7 @@ All Notable changes to `Csv` will be documented in this file
 
 ### Added
 
+- `RecordFilterIterator` to filter records while preserving their original offsets; predicate failures are reported via `QueryException::dueToPredicateFailure` with the original record offset instead of the filtered sequence position.
 - Support for `Closure` in constant expressions during Record Mapping.
 - `AbstractCsv::fromStream` to instantiate a `Reader` or a `Writer` instance from a stream or a `SplFileObject` object
 - `AbstractCsv::fromPath` to instantiate a `Reader` or a `Writer` instance from a path as a string or a `SplFileInfo` object

@@ -328,7 +328,7 @@ class Statement
 
         $iterator = $tabular_data->getRecords($header);
         if ([] !== $this->where) {
-            $iterator = Query\Constraint\Criteria::all(...$this->where)->filter($iterator);
+            $iterator = new RecordFilterIterator($iterator, Query\Constraint\Criteria::all(...$this->where));
         }
 
         if ([] !== $this->order_by) {
