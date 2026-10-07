@@ -15,6 +15,7 @@ namespace League\Csv;
 
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[Group('csv')]
 final class CannotInsertRecordTest extends TestCase
@@ -37,5 +38,28 @@ final class CannotInsertRecordTest extends TestCase
         self::assertSame($record, $exception->getRecord());
         self::assertSame('foo bar', $exception->getName());
         self::assertSame('Record validation failed', $exception->getMessage());
+    }
+
+    public function testTriggerOnBatchFormatting(): void
+    {
+        $record = ['jane', 'doe', 'jane.doe@example.com'];
+        $previous = new RuntimeException('formatter failure');
+        $exception = CannotInsertRecord::triggerOnBatchFormatting($record, $previous);
+
+        self::assertSame($record, $exception->getRecord());
+        self::assertSame(0, $exception->getWrittenCount());
+        self::assertSame($previous, $exception->getPrevious());
+    }
+
+    public function testTriggerOnBatchInsertion(): void
+    {
+        $record = ['jane', 'doe', 'jane.doe@example.com'];
+        $previous = CannotInsertRecord::triggerOnInsertion($record);
+        $exception = CannotInsertRecord::triggerOnBatchInsertion($record, 1, $previous);
+
+        self::assertSame($record, $exception->getRecord());
+        self::assertSame(1, $exception->getWrittenCount());
+        self::assertSame($previous, $exception->getPrevious());
+        self::assertStringContainsString('1 record(s) already written', $exception->getMessage());
     }
 }

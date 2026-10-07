@@ -17,10 +17,17 @@ use ArrayIterator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use TypeError;
 
 use function array_map;
 use function fclose;
 use function fopen;
+use function in_array;
+use function strlen;
+use function stream_get_wrappers;
+use function stream_wrapper_register;
+use function stream_wrapper_unregister;
 use function tmpfile;
 
 #[Group('writer')]
@@ -425,5 +432,154 @@ CSV;
         self::assertTrue($csv->encloseNone());
         self::assertFalse($csv->encloseNecessary());
         self::assertStringContainsString($expected, $csv->toString());
+    }
+
+    public function testInsertBatchWritesAllRecordsAndReturnsByteCount(): void
+    {
+        $records = [
+            ['john', 'doe', 'john.doe@example.com'],
+            ['jane', 'doe', 'jane.doe@example.com'],
+            ['jack', 'jane', 'jack.jane@example.com'],
+        ];
+
+        $expected = "john,doe,john.doe@example.com\n"
+            ."jane,doe,jane.doe@example.com\n"
+            ."jack,jane,jack.jane@example.com\n";
+
+        self::assertSame(strlen($expected), $this->csv->insertBatch($records));
+        self::assertSame($expected, $this->csv->toString());
+    }
+
+    public function testInsertBatchAppliesFormattersBeforeWriting(): void
+    {
+        $this->csv->addFormatter(fn (array $record): array => array_map(strtoupper(...), $record));
+
+        $this->csv->insertBatch([
+            ['john', 'doe'],
+            ['jane', 'doe'],
+        ]);
+
+        self::assertSame("JOHN,DOE\nJANE,DOE\n", $this->csv->toString());
+    }
+
+    public function testInsertBatchWithInconsistentFieldCountWritesNothing(): void
+    {
+        try {
+            $this->csv->insertBatch([
+                ['john', 'doe', 'john.doe@example.com'],
+                ['jane', 'doe'],
+                ['jack', 'jane', 'jack.jane@example.com'],
+            ]);
+            self::fail('A CannotInsertRecord exception was expected.');
+        } catch (CannotInsertRecord $exception) {
+            self::assertSame('', $this->csv->toString());
+            self::assertSame(['jane', 'doe'], $exception->getRecord());
+            self::assertSame('@batch_field_count_consistency', $exception->getName());
+            self::assertSame(0, $exception->getWrittenCount());
+        }
+    }
+
+    public function testInsertBatchWithFailingFormatterWritesNothing(): void
+    {
+        $this->csv->addFormatter(fn (array $record): array => match ($record[0]) {
+            'jane' => throw new RuntimeException('formatter failure'),
+            default => $record,
+        });
+
+        try {
+            $this->csv->insertBatch([
+                ['john', 'doe', 'john.doe@example.com'],
+                ['jane', 'doe', 'jane.doe@example.com'],
+                ['jack', 'jane', 'jack.jane@example.com'],
+            ]);
+            self::fail('A CannotInsertRecord exception was expected.');
+        } catch (CannotInsertRecord $exception) {
+            self::assertSame('', $this->csv->toString());
+            self::assertSame(0, $exception->getWrittenCount());
+            self::assertInstanceOf(RuntimeException::class, $exception->getPrevious());
+            self::assertSame('formatter failure', $exception->getPrevious()->getMessage());
+        }
+    }
+
+    public function testInsertBatchReportsWrittenRecordsOnWriteFailure(): void
+    {
+        FailingOnNthWriteStreamWrapper::failOnWrite(2);
+        $csv = Writer::from(fopen(FailingOnNthWriteStreamWrapper::SCHEME.'://batch', 'w'));
+
+        try {
+            $csv->insertBatch([
+                ['john', 'doe', 'john.doe@example.com'],
+                ['jane', 'doe', 'jane.doe@example.com'],
+                ['jack', 'jane', 'jack.jane@example.com'],
+            ]);
+            self::fail('A CannotInsertRecord exception was expected.');
+        } catch (CannotInsertRecord $exception) {
+            self::assertSame(1, $exception->getWrittenCount());
+            self::assertSame(['jane', 'doe', 'jane.doe@example.com'], $exception->getRecord());
+            self::assertInstanceOf(CannotInsertRecord::class, $exception->getPrevious());
+            self::assertSame("john,doe,john.doe@example.com\n", FailingOnNthWriteStreamWrapper::$written);
+        }
+    }
+
+    public function testInsertBatchOnlyAcceptsSizedInput(): void
+    {
+        $this->expectException(TypeError::class);
+
+        $this->csv->insertBatch((function (): iterable { yield ['jane', 'doe']; })());  // @phpstan-ignore-line
+    }
+}
+
+/**
+ * In-memory stream wrapper which fails on a given write call.
+ *
+ * @internal fixture for WriterTest only
+ */
+final class FailingOnNthWriteStreamWrapper
+{
+    public const SCHEME = 'leaguecsv-failing-writer';
+
+    /** @var resource */
+    public $context;
+    public static string $written = '';
+    private static int $failOnWrite = -1;
+    private int $writes = 0;
+
+    public static function failOnWrite(int $nthWrite): void
+    {
+        self::$failOnWrite = $nthWrite;
+        self::$written = '';
+        in_array(self::SCHEME, stream_get_wrappers(), true) && stream_wrapper_unregister(self::SCHEME);
+        stream_wrapper_register(self::SCHEME, self::class);
+    }
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$opened_path): bool
+    {
+        return true;
+    }
+
+    public function stream_write(string $data): int|false
+    {
+        ++$this->writes;
+        if ($this->writes === self::$failOnWrite) {
+            return false;
+        }
+
+        self::$written .= $data;
+
+        return strlen($data);
+    }
+
+    public function stream_flush(): bool
+    {
+        return true;
+    }
+
+    public function stream_eof(): bool
+    {
+        return false;
+    }
+
+    public function stream_close(): void
+    {
     }
 }

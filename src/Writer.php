@@ -16,9 +16,11 @@ namespace League\Csv;
 use Closure;
 use Deprecated;
 use SplFileInfo;
+use Throwable;
 
 use function array_map;
 use function array_reduce;
+use function count;
 use function implode;
 use function str_replace;
 
@@ -144,6 +146,62 @@ class Writer extends AbstractCsv implements TabularDataWriter
             default => $records,
         } as $record) {
             $bytes += $this->insertOne($record);
+        }
+
+        $this->flush_counter = 0;
+        $this->document->fflush();
+
+        return $bytes;
+    }
+
+    /**
+     * Adds a small batch of records to the CSV document.
+     *
+     * The whole batch is first buffered and pre-validated (field count
+     * consistency, record formatters and validators); if the pre-validation
+     * fails, no record of the batch is written at all. If the underlying
+     * write fails while the batch is being written, the thrown exception
+     * reports how many records of the batch were already written.
+     *
+     * Only batch input with a known size (ie. arrays) is supported.
+     *
+     * @see Writer::insertAll
+     *
+     * @throws CannotInsertRecord
+     * @throws Exception
+     */
+    public function insertBatch(array $records): int
+    {
+        $prepared = [];
+        $fieldCount = null;
+        foreach ($records as $record) {
+            try {
+                $record = array_reduce($this->formatters, fn (array $record, callable $formatter): array => $formatter($record), $record);
+            } catch (Throwable $exception) {
+                throw CannotInsertRecord::triggerOnBatchFormatting($record, $exception);
+            }
+
+            $fieldCount ??= count($record);
+            count($record) === $fieldCount || throw CannotInsertRecord::triggerOnValidation('@batch_field_count_consistency', $record);
+            $this->validateRecord($record);
+            $prepared[] = $record;
+        }
+
+        $bytes = 0;
+        $written = 0;
+        foreach ($prepared as $record) {
+            /** @var int|false $inserted */
+            $inserted = Warning::cloak($this->insertRecord(...), $record);
+            if (false === $inserted) {
+                throw CannotInsertRecord::triggerOnBatchInsertion($record, $written, CannotInsertRecord::triggerOnInsertion($record));
+            }
+
+            $bytes += $inserted;
+            ++$written;
+            if (null !== $this->flush_threshold && 0 === ++$this->flush_counter % $this->flush_threshold) {
+                $this->flush_counter = 0;
+                $this->document->fflush();
+            }
         }
 
         $this->flush_counter = 0;

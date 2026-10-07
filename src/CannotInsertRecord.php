@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace League\Csv;
 
+use Throwable;
+
 /**
  * Thrown when a data is not added to the Csv Document.
  */
@@ -22,6 +24,8 @@ class CannotInsertRecord extends Exception
     protected array $record = [];
     /** Validator which did not validate the data. */
     protected string $name = '';
+    /** The number of records already written before a batch insertion failed. */
+    protected int $writtenCount = 0;
 
     /**
      * Creates an Exception from a record insertion into a stream.
@@ -44,6 +48,37 @@ class CannotInsertRecord extends Exception
         $exception->record = $record;
 
         return $exception;
+    }
+
+    /**
+     * Creates an Exception from a record formatting failure during batch pre-validation.
+     */
+    public static function triggerOnBatchFormatting(array $record, Throwable $previous): self
+    {
+        $exception = new self('Record formatting failed during batch pre-validation; no record was written', 0, $previous);
+        $exception->record = $record;
+
+        return $exception;
+    }
+
+    /**
+     * Creates an Exception from a record insertion failure during batch writing.
+     */
+    public static function triggerOnBatchInsertion(array $record, int $writtenCount, ?Throwable $previous = null): self
+    {
+        $exception = new self('Unable to write record to the CSV document; '.$writtenCount.' record(s) already written in the current batch', 0, $previous);
+        $exception->record = $record;
+        $exception->writtenCount = $writtenCount;
+
+        return $exception;
+    }
+
+    /**
+     * Returns the number of records already written before the batch insertion failed.
+     */
+    public function getWrittenCount(): int
+    {
+        return $this->writtenCount;
     }
 
     /**
