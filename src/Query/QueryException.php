@@ -15,9 +15,15 @@ namespace League\Csv\Query;
 
 use Exception;
 use League\Csv\UnableToProcessCsv;
+use Throwable;
 
 final class QueryException extends Exception implements UnableToProcessCsv
 {
+    public static function dueToPredicateFailure(string|int $offset, Throwable $previous): self
+    {
+        return new self('The predicate failed on the record with the offset `'.$offset.'`.', 0, $previous);
+    }
+
     public static function dueToUnknownColumn(string|int $column, array|object $value): self
     {
         return match (true) {

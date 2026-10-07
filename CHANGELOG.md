@@ -10,6 +10,7 @@ All Notable changes to `Csv` will be documented in this file
 - `AbstractCsv::fromStream` to instantiate a `Reader` or a `Writer` instance from a stream or a `SplFileObject` object
 - `AbstractCsv::fromPath` to instantiate a `Reader` or a `Writer` instance from a path as a string or a `SplFileInfo` object
 - Support for `SortDirection` enum from PHP 8.6+ - [#580](https://github.com/thephpleague/csv/pull/580) by [okorneliuk](https://github.com/okorneliuk)
+- `League\Csv\Query\RecordFilterIterator` to filter records while preserving their original offsets; predicate failures are reported with the source record offset instead of the filtered sequence position
 
 ### Deprecated
 

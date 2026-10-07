@@ -13,12 +13,11 @@ declare(strict_types=1);
 
 namespace League\Csv\Query\Constraint;
 
-use CallbackFilterIterator;
 use Closure;
 use Iterator;
-use League\Csv\MapIterator;
 use League\Csv\Query\Predicate;
 use League\Csv\Query\QueryException;
+use League\Csv\Query\RecordFilterIterator;
 use League\Csv\Query\Row;
 use ReflectionException;
 
@@ -94,6 +93,6 @@ final readonly class TwoColumns implements Predicate
 
     public function filter(iterable $value): Iterator
     {
-        return new CallbackFilterIterator(MapIterator::toIterator($value), $this);
+        return RecordFilterIterator::fromIterable($value, $this);
     }
 }

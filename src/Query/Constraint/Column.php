@@ -13,11 +13,10 @@ declare(strict_types=1);
 
 namespace League\Csv\Query\Constraint;
 
-use CallbackFilterIterator;
 use Closure;
 use Iterator;
-use League\Csv\MapIterator;
 use League\Csv\Query;
+use League\Csv\Query\RecordFilterIterator;
 use ReflectionException;
 
 /**
@@ -80,6 +79,6 @@ final readonly class Column implements Query\Predicate
 
     public function filter(iterable $value): Iterator
     {
-        return new CallbackFilterIterator(MapIterator::toIterator($value), $this);
+        return RecordFilterIterator::fromIterable($value, $this);
     }
 }

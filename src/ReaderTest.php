@@ -16,6 +16,7 @@ namespace League\Csv;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\Attributes\Group;
+use RuntimeException;
 use SplFileObject;
 
 use function array_keys;
@@ -23,6 +24,7 @@ use function count;
 use function fclose;
 use function fopen;
 use function fputcsv;
+use function iterator_to_array;
 use function json_encode;
 use function tmpfile;
 use function unlink;
@@ -670,5 +672,71 @@ CSV;
         $csv->setHeaderOffset(0);
 
         self::assertSame(['a,b', 'c'], $csv->getHeader());
+    }
+
+    public function testFilterPredicateFailureReportsTheOriginalRecordOffset(): void
+    {
+        $csv = Reader::fromString(<<<CSV
+name,role
+john,admin
+jane,user
+joe,user
+jack,admin
+julia,user
+CSV);
+        $csv->setHeaderOffset(0);
+
+        $predicate = function (array $record, int $offset): bool {
+            if (4 === $offset) {
+                throw new RuntimeException('boom');
+            }
+
+            return 'admin' === $record['role'] || 3 === $offset;
+        };
+
+        $records = [];
+        try {
+            foreach ($csv->filter($predicate) as $offset => $record) {
+                $records[$offset] = $record;
+            }
+
+            self::fail('The predicate failure should have been reported.');
+        } catch (Query\QueryException $exception) {
+            // the fourth record failed: the reported offset is the original
+            // record offset `4`, not its position `2` in the filtered sequence
+            self::assertStringContainsString('offset `4`', $exception->getMessage());
+            self::assertStringNotContainsString('offset `2`', $exception->getMessage());
+            self::assertInstanceOf(RuntimeException::class, $exception->getPrevious());
+        }
+
+        // the 2 filtered records keep their original offsets and their header mapping
+        self::assertSame([
+            1 => ['name' => 'john', 'role' => 'admin'],
+            3 => ['name' => 'joe', 'role' => 'user'],
+        ], $records);
+
+        // interrupting the iteration did not close the borrowed CSV resource
+        self::assertCount(5, iterator_to_array($csv->getRecords(), false));
+        self::assertSame(['name' => 'julia', 'role' => 'user'], $csv->fetchOne(4));
+    }
+
+    public function testFilterIterationCanBeInterruptedWithoutClosingTheCsv(): void
+    {
+        $csv = Reader::fromString(<<<CSV
+name,role
+john,admin
+jane,user
+joe,user
+jack,admin
+julia,user
+CSV);
+        $csv->setHeaderOffset(0);
+
+        foreach ($csv->filter(fn (array $record): bool => true) as $record) {
+            break;
+        }
+
+        self::assertSame(5, $csv->count());
+        self::assertSame(['name' => 'john', 'role' => 'admin'], $csv->first());
     }
 }
