@@ -153,6 +153,72 @@ class Writer extends AbstractCsv implements TabularDataWriter
     }
 
     /**
+     * Adds a small batch of records to the CSV document after validating the whole batch.
+     *
+     * The batch is first buffered and fully validated: each record is
+     * formatted and validated, and all records must share the same field
+     * count. If the batch validation fails, nothing is written to the
+     * document. If the underlying write fails while flushing the batch,
+     * the thrown exception reports how many records were already written.
+     *
+     * Only small batches with an explicit maximum size are supported.
+     *
+     * @see Writer::insertAll
+     *
+     * @param iterable<array> $records a small batch of records
+     * @param int $batchSize the maximum number of records the batch may contain
+     *
+     * @throws InvalidArgument If the batch size is invalid or the batch contains more records than declared
+     * @throws CannotInsertRecord If the batch validation fails or a record can not be inserted
+     * @throws Exception If the record can not be inserted
+     */
+    public function insertBatch(iterable $records, int $batchSize): int
+    {
+        1 <= $batchSize || throw InvalidArgument::dueToInvalidBatchSize($batchSize, __METHOD__);
+
+        $buffer = [];
+        foreach ($records as $record) {
+            $buffer[] = $record;
+            count($buffer) <= $batchSize || throw InvalidArgument::dueToBatchSizeExceeded($batchSize, __METHOD__);
+        }
+
+        $prepared = [];
+        $fieldCount = null;
+        foreach ($buffer as $record) {
+            $record = array_reduce($this->formatters, fn (array $record, callable $formatter): array => $formatter($record), $record);
+            $fieldCount ??= count($record);
+            count($record) === $fieldCount || throw CannotInsertRecord::triggerOnValidation('record_field_count', $record);
+            $this->validateRecord($record);
+            $prepared[] = $record;
+        }
+
+        $bytes = 0;
+        $written = 0;
+        foreach ($prepared as $record) {
+            /** @var int|false $writtenBytes */
+            $writtenBytes = Warning::cloak($this->insertRecord(...), $record);
+            if (false === $writtenBytes) {
+                throw CannotInsertRecord::triggerOnPartialInsertion($record, $written, CannotInsertRecord::triggerOnInsertion($record));
+            }
+
+            $bytes += $writtenBytes;
+            ++$written;
+            if (null !== $this->flush_threshold) {
+                ++$this->flush_counter;
+                if (0 === $this->flush_counter % $this->flush_threshold) {
+                    $this->flush_counter = 0;
+                    $this->document->fflush();
+                }
+            }
+        }
+
+        $this->flush_counter = 0;
+        $this->document->fflush();
+
+        return $bytes;
+    }
+
+    /**
      * Adds a single record to a CSV document.
      *
      * A record is an array that can contain scalar type values, NULL values

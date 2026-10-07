@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace League\Csv;
 
+use Throwable;
+
 /**
  * Thrown when a data is not added to the Csv Document.
  */
@@ -22,6 +24,8 @@ class CannotInsertRecord extends Exception
     protected array $record = [];
     /** Validator which did not validate the data. */
     protected string $name = '';
+    /** The number of records already written to the CSV document before the failure. */
+    protected int $writtenCount = 0;
 
     /**
      * Creates an Exception from a record insertion into a stream.
@@ -44,6 +48,29 @@ class CannotInsertRecord extends Exception
         $exception->record = $record;
 
         return $exception;
+    }
+
+    /**
+     * Creates an Exception from a record insertion into a stream
+     * after some records of the current batch were already written.
+     *
+     * The previously submitted exception, if any, is used as the cause.
+     */
+    public static function triggerOnPartialInsertion(array $record, int $writtenCount, ?Throwable $previous = null): self
+    {
+        $exception = new self('Unable to write record to the CSV document; '.$writtenCount.' record(s) already written to the document.', 0, $previous);
+        $exception->record = $record;
+        $exception->writtenCount = $writtenCount;
+
+        return $exception;
+    }
+
+    /**
+     * Returns the number of records already written to the CSV document before the failure.
+     */
+    public function getWrittenCount(): int
+    {
+        return $this->writtenCount;
     }
 
     /**

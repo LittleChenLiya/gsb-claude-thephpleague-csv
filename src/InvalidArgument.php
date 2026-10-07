@@ -104,4 +104,14 @@ class InvalidArgument extends Exception
     {
         return new self($method.'() expects threshold to be null or a valid integer greater or equal to 1');
     }
+
+    public static function dueToInvalidBatchSize(int $batchSize, string $method): self
+    {
+        return new self($method.'() expects the batch size to be a positive integer, '.$batchSize.' given.');
+    }
+
+    public static function dueToBatchSizeExceeded(int $batchSize, string $method): self
+    {
+        return new self($method.'() only supports small batches of at most '.$batchSize.' record(s); the submitted input contains more records.');
+    }
 }
